@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Family Finance Tracker</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body class="bg-slate-50 text-slate-800 antialiased min-h-screen">
+  <div class="max-w-4xl mx-auto p-4 sm:p-6 space-y-6">
+
+    <!-- Header -->
+    <header class="flex justify-between items-center border-b pb-4">
+      <div>
+        <h1 class="text-2xl font-bold text-slate-900">Family Finance Tracker</h1>
+        <p class="text-xs sm:text-sm text-slate-500">Track combined income, bills, groceries, and Shopee orders</p>
+      </div>
+      <button onclick="exportData()" class="text-xs bg-slate-200 hover:bg-slate-300 text-slate-700 px-3 py-1.5 rounded-lg font-medium">Backup / Export</button>
+    </header>
+
+    <!-- Summary Cards -->
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200">
+        <p class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Total Income</p>
+        <p id="totalIncome" class="text-2xl font-bold text-emerald-600 mt-1">₱0.00</p>
+      </div>
+      <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200">
+        <p class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Total Expenses</p>
+        <p id="totalExpenses" class="text-2xl font-bold text-rose-600 mt-1">₱0.00</p>
+      </div>
+      <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200">
+        <p class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Net Balance</p>
+        <p id="netBalance" class="text-2xl font-bold text-slate-900 mt-1">₱0.00</p>
+      </div>
+    </div>
+
+    <!-- Smart Suggestions & Insights -->
+    <div id="insightBox" class="bg-amber-50 border border-amber-200 text-amber-900 p-4 rounded-xl text-sm hidden">
+      <p class="font-semibold mb-1">💡 Spending Insight</p>
+      <p id="insightText">Start adding transactions to get smart spending tips.</p>
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <!-- Input Form -->
+      <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200 space-y-4">
+        <h2 class="text-lg font-bold text-slate-900">Add Transaction</h2>
+        
+        <div class="grid grid-cols-2 gap-2">
+          <button id="typeExpenseBtn" onclick="setType('expense')" class="w-full py-2 font-semibold text-sm rounded-lg bg-rose-600 text-white">Expense</button>
+          <button id="typeIncomeBtn" onclick="setType('income')" class="w-full py-2 font-semibold text-sm rounded-lg bg-slate-100 text-slate-600">Income</button>
+        </div>
+
+        <div>
+          <label class="block text-xs font-medium text-slate-600 mb-1">Category</label>
+          <select id="categorySelect" class="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-slate-900 outline-none">
+            <!-- Populated dynamically -->
+          </select>
+        </div>
+
+        <div>
+          <label class="block text-xs font-medium text-slate-600 mb-1">Amount</label>
+          <input type="number" id="amountInput" placeholder="0.00" class="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-slate-900 outline-none" />
+        </div>
+
+        <div>
+          <label class="block text-xs font-medium text-slate-600 mb-1">Description / Notes</label>
+          <input type="text" id="descInput" placeholder="e.g. Meralco bill, Shopee cart sale" class="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-slate-900 outline-none" />
+        </div>
+
+        <button onclick="addTransaction()" class="w-full bg-slate-900 hover:bg-slate-800 text-white font-medium py-2.5 rounded-lg text-sm transition">Record Transaction</button>
+      </div>
+
+      <!-- Expense Chart -->
+      <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200 flex flex-col items-center justify-center">
+        <h2 class="text-lg font-bold text-slate-900 mb-2 self-start">Where Money Goes</h2>
+        <div class="w-full max-w-[280px]">
+          <canvas id="expenseChart"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <!-- Recent History -->
+    <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200 space-y-3">
+      <h2 class="text-lg font-bold text-slate-900">Recent Transactions</h2>
+      <div id="txList" class="divide-y divide-slate-100 max-h-80 overflow-y-auto">
+        <p class="text-sm text-slate-400 py-4 text-center">No transactions added yet.</p>
+      </div>
+    </div>
+
+  </div>
+
+  <script>
+    let currentType = 'expense';
+    let transactions = JSON.parse(localStorage.getItem('family_finance_data') || '[]');
+    let chartInstance = null;
+
+    const categories = {
+      income: ['Husband Salary', 'Wife Salary', 'Bonus', 'Loans / Receivables', 'Other Income'],
+      expense: ['Groceries', 'Shopee / Online Orders', 'Utility Bills', 'Dining / Takeout', 'Rent / Housing', 'Transportation', 'Other Expenses']
+    };
+
+    function updateCategoryDropdown() {
+      const select = document.getElementById('categorySelect');
+      select.innerHTML = '';
+      categories[currentType].forEach(cat => {
+        const opt = document.createElement('option');
+        opt.value = cat;
+        opt.textContent = cat;
+        select.appendChild(opt);
+      });
+    }
+
+    function setType(type) {
+      currentType = type;
+      const expenseBtn = document.getElementById('typeExpenseBtn');
+      const incomeBtn = document.getElementById('typeIncomeBtn');
+      if (type === 'expense') {
+        expenseBtn.className = 'w-full py-2 font-semibold text-sm rounded-lg bg-rose-600 text-white';
+        incomeBtn.className = 'w-full py-2 font-semibold text-sm rounded-lg bg-slate-100 text-slate-600';
+      } else {
+        incomeBtn.className = 'w-full py-2 font-semibold text-sm rounded-lg bg-emerald-600 text-white';
+        expenseBtn.className = 'w-full py-2 font-semibold text-sm rounded-lg bg-slate-100 text-slate-600';
+      }
+      updateCategoryDropdown();
+    }
+
+    function addTransaction() {
+      const amount = parseFloat(document.getElementById('amountInput').value);
+      const category = document.getElementById('categorySelect').value;
+      const desc = document.getElementById('descInput').value.trim();
+
+      if (!amount || amount <= 0) {
+        alert('Please enter a valid amount.');
+        return;
+      }
+
+      transactions.unshift({
+        id: Date.now(),
+        type: currentType,
+        category,
+        amount,
+        desc: desc || category,
+        date: new Date().toLocaleDateString('en-PH', { month: 'short', day: 'numeric' })
+      });
+
+      localStorage.setItem('family_finance_data', JSON.stringify(transactions));
+      document.getElementById('amountInput').value = '';
+      document.getElementById('descInput').value = '';
+      render();
+    }
+
+    function deleteTransaction(id) {
+      transactions = transactions.filter(t => t.id !== id);
+      localStorage.setItem('family_finance_data', JSON.stringify(transactions));
+      render();
+    }
+
+    function render() {
+      let income = 0;
+      let expenses = 0;
+      const categoryTotals = {};
+
+      transactions.forEach(t => {
+        if (t.type === 'income') {
+          income += t.amount;
+        } else {
+          expenses += t.amount;
+          categoryTotals[t.category] = (categoryTotals[t.category] || 0) + t.amount;
+        }
+      });
+
+      document.getElementById('totalIncome').textContent = '₱' + income.toLocaleString(undefined, {minimumFractionDigits: 2});
+      document.getElementById('totalExpenses').textContent = '₱' + expenses.toLocaleString(undefined, {minimumFractionDigits: 2});
+      const balance = income - expenses;
+      const balanceEl = document.getElementById('netBalance');
+      balanceEl.textContent = '₱' + balance.toLocaleString(undefined, {minimumFractionDigits: 2});
+      balanceEl.className = 'text-2xl font-bold mt-1 ' + (balance >= 0 ? 'text-slate-900' : 'text-rose-600');
+
+      // Update Chart
+      const chartLabels = Object.keys(categoryTotals);
+      const chartData = Object.values(categoryTotals);
+
+      if (chartInstance) chartInstance.destroy();
+
+      const ctx = document.getElementById('expenseChart').getContext('2d');
+      chartInstance = new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+          labels: chartLabels.length ? chartLabels : ['No Expenses'],
+          datasets: [{
+            data: chartData.length ? chartData : [1],
+            backgroundColor: chartData.length ? ['#f43f5e', '#fb923c', '#38bdf8', '#818cf8', '#a855f7', '#10b981', '#94a3b8'] : ['#e2e8f0']
+          }]
+        },
+        options: {
+          responsive: true,
+          plugins: {
+            legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 10 } } }
+          }
+        }
+      });
+
+      // Update List
+      const listEl = document.getElementById('txList');
+      if (transactions.length === 0) {
+        listEl.innerHTML = '<p class="text-sm text-slate-400 py-4 text-center">No transactions added yet.</p>';
+      } else {
+        listEl.innerHTML = transactions.map(t => `
+          <div class="py-3 flex justify-between items-center text-sm">
+            <div>
+              <p class="font-medium text-slate-900">${t.desc}</p>
+              <p class="text-xs text-slate-400">${t.date} • ${t.category}</p>
+            </div>
+            <div class="flex items-center space-x-3">
+              <span class="font-semibold ${t.type === 'income' ? 'text-emerald-600' : 'text-slate-800'}">
+                ${t.type === 'income' ? '+' : '-'}₱${t.amount.toLocaleString(undefined, {minimumFractionDigits: 2})}
+              </span>
+              <button onclick="deleteTransaction(${t.id})" class="text-slate-400 hover:text-rose-600 text-xs">✕</button>
+            </div>
+          </div>
+        `).join('');
+      }
+
+      // Smart Insights
+      const insightBox = document.getElementById('insightBox');
+      const insightText = document.getElementById('insightText');
+      if (expenses > 0 && income > 0) {
+        const shopeeSpent = categoryTotals['Shopee / Online Orders'] || 0;
+        const shopeeShare = (shopeeSpent / expenses) * 100;
+        const savingsRate = (balance / income) * 100;
+
+        if (shopeeShare > 25) {
+          insightBox.classList.remove('hidden');
+          insightText.textContent = `Online shopping accounts for ${shopeeShare.toFixed(1)}% of your total expenses. Consider adding a weekly cooling-off period for cart checkout.`;
+        } else if (savingsRate < 10 && balance >= 0) {
+          insightBox.classList.remove('hidden');
+          insightText.textContent = `Current savings rate is ${savingsRate.toFixed(1)}%. Review recurring utility and miscellaneous bills to aim for a 20% buffer.`;
+        } else if (balance < 0) {
+          insightBox.classList.remove('hidden');
+          insightText.textContent = `Expenses exceed current income by ₱${Math.abs(balance).toLocaleString()}. Prioritize mandatory groceries and bills first.`;
+        } else {
+          insightBox.classList.remove('hidden');
+          insightText.textContent = `Healthy balance: you are retaining ${savingsRate.toFixed(1)}% of total household earnings.`;
+        }
+      } else {
+        insightBox.classList.add('hidden');
+      }
+    }
+
+    function exportData() {
+      const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(transactions));
+      const downloadAnchor = document.createElement('a');
+      downloadAnchor.setAttribute("href", dataStr);
+      downloadAnchor.setAttribute("download", "family_finance_backup.json");
+      document.body.appendChild(downloadAnchor);
+      downloadAnchor.click();
+      downloadAnchor.remove();
+    }
+
+    updateCategoryDropdown();
+    render();
+  </script>
+</body>
+</html>
