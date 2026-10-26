@@ -3,42 +3,54 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Family Finance Tracker</title>
+  <title>Family Finance Tracker Pro</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <!-- Firebase Compatibility Libraries -->
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
 </head>
 <body class="bg-slate-50 text-slate-800 antialiased min-h-screen">
   <div class="max-w-4xl mx-auto p-4 sm:p-6 space-y-6">
 
-    <!-- Header -->
-    <header class="flex justify-between items-center border-b pb-4">
+    <!-- Header & Navigation Bar -->
+    <header class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b pb-4">
       <div>
         <h1 class="text-2xl font-bold text-slate-900">Family Finance Tracker</h1>
-        <p class="text-xs sm:text-sm text-slate-500">Live Budget & Forecast Across Devices</p>
+        <p class="text-xs sm:text-sm text-slate-500">Live synced • Offline ready • Household budget</p>
       </div>
-      <div class="flex items-center space-x-2">
-        <span id="syncIndicator" class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-amber-100 text-amber-800">
-          Connecting to Cloud...
+
+      <div class="flex flex-wrap items-center gap-2">
+        <!-- Month Filter Selector -->
+        <select id="monthFilter" onchange="render()" class="text-xs bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 font-medium outline-none">
+          <!-- Populated dynamically -->
+        </select>
+
+        <!-- Quick Actions -->
+        <button onclick="addRecurringTemplates()" class="text-xs bg-indigo-50 hover:bg-indigo-100 text-indigo-700 px-3 py-1.5 rounded-lg font-semibold border border-indigo-200">
+          ⚡ Recurring Bills
+        </button>
+
+        <span id="syncIndicator" class="inline-flex items-center px-2.5 py-1.5 rounded-full text-xs font-medium bg-amber-100 text-amber-800">
+          Connecting...
         </span>
       </div>
     </header>
 
-    <!-- Balance & Cash Flow Forecast -->
+    <!-- Top Balances Overview -->
     <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
       <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200">
         <div class="flex justify-between items-center">
-          <p class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Current Bank Balance</p>
-          <span class="text-[10px] bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full font-medium">Actual Money</span>
+          <p class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Actual Bank Balance</p>
+          <span class="text-[10px] bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full font-medium">In Hand</span>
         </div>
         <p id="actualBalance" class="text-3xl font-extrabold text-slate-900 mt-2">₱0.00</p>
-        <p class="text-xs text-slate-400 mt-1">Actual Earnings − Actual Expenses</p>
+        <p class="text-xs text-slate-400 mt-1">Cleared Earnings − Cleared Expenses</p>
       </div>
 
       <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200">
         <div class="flex justify-between items-center">
-          <p class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Projected Month-End Balance</p>
+          <p class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Projected Month-End</p>
           <span class="text-[10px] bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded-full font-medium">Forecast</span>
         </div>
         <p id="projectedBalance" class="text-3xl font-extrabold text-indigo-600 mt-2">₱0.00</p>
@@ -46,44 +58,54 @@
       </div>
     </div>
 
-    <!-- Expected vs Actual Progress Comparison -->
-    <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200 space-y-4">
-      <h2 class="text-base font-bold text-slate-900">Actual vs. Expected Overview</h2>
+    <!-- 50/30/20 Rule: Needs vs. Wants vs. Savings -->
+    <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200 space-y-3">
+      <div class="flex justify-between items-center">
+        <h2 class="text-sm font-bold text-slate-900">50 / 30 / 20 Cash Allocation Rule</h2>
+        <span class="text-xs text-slate-400">Based on Actual Expenses</span>
+      </div>
       
-      <!-- Income Comparison -->
-      <div class="space-y-1">
-        <div class="flex justify-between text-xs font-medium">
-          <span class="text-emerald-700">Earnings Received: <strong id="actualIncomeText">₱0.00</strong></span>
-          <span class="text-slate-500">Expected Total: <strong id="expectedIncomeText">₱0.00</strong></span>
-        </div>
-        <div class="w-full bg-slate-100 rounded-full h-3 overflow-hidden">
-          <div id="incomeProgressBar" class="bg-emerald-500 h-3 rounded-full transition-all duration-500" style="width: 0%"></div>
-        </div>
-        <div class="flex justify-between text-[11px] text-slate-400">
-          <span id="incomeProgressPercent">0% received</span>
-          <span id="pendingIncomeText">₱0.00 still upcoming</span>
-        </div>
+      <!-- Combined Progress Bar -->
+      <div class="w-full bg-slate-100 rounded-full h-4 flex overflow-hidden">
+        <div id="barNeeds" class="bg-blue-500 h-full transition-all duration-300" style="width: 0%" title="Needs"></div>
+        <div id="barWants" class="bg-amber-500 h-full transition-all duration-300" style="width: 0%" title="Wants"></div>
+        <div id="barSavings" class="bg-emerald-500 h-full transition-all duration-300" style="width: 0%" title="Savings & Debt"></div>
       </div>
 
-      <!-- Expense Comparison -->
-      <div class="space-y-1 pt-2 border-t border-slate-100">
-        <div class="flex justify-between text-xs font-medium">
-          <span class="text-rose-700">Expenses Paid: <strong id="actualExpenseText">₱0.00</strong></span>
-          <span class="text-slate-500">Expected Total: <strong id="expectedExpenseText">₱0.00</strong></span>
+      <div class="grid grid-cols-3 text-center text-xs pt-1">
+        <div>
+          <span class="inline-block w-2.5 h-2.5 rounded-full bg-blue-500 mr-1"></span>
+          <span class="font-medium text-slate-700">Needs (Target 50%)</span>
+          <p id="needsPercent" class="font-bold text-slate-900 mt-0.5">₱0.00 (0%)</p>
         </div>
-        <div class="w-full bg-slate-100 rounded-full h-3 overflow-hidden">
-          <div id="expenseProgressBar" class="bg-rose-500 h-3 rounded-full transition-all duration-500" style="width: 0%"></div>
+        <div>
+          <span class="inline-block w-2.5 h-2.5 rounded-full bg-amber-500 mr-1"></span>
+          <span class="font-medium text-slate-700">Wants (Target 30%)</span>
+          <p id="wantsPercent" class="font-bold text-slate-900 mt-0.5">₱0.00 (0%)</p>
         </div>
-        <div class="flex justify-between text-[11px] text-slate-400">
-          <span id="expenseProgressPercent">0% spent</span>
-          <span id="pendingExpenseText">₱0.00 bills remaining</span>
+        <div>
+          <span class="inline-block w-2.5 h-2.5 rounded-full bg-emerald-500 mr-1"></span>
+          <span class="font-medium text-slate-700">Savings/Debt (Target 20%)</span>
+          <p id="savingsPercent" class="font-bold text-slate-900 mt-0.5">₱0.00 (0%)</p>
         </div>
       </div>
     </div>
 
-    <!-- Insights -->
+    <!-- Category Budget Watch -->
+    <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200 space-y-3">
+      <div class="flex justify-between items-center">
+        <h2 class="text-sm font-bold text-slate-900">Discretionary Budget Guardrails</h2>
+        <button onclick="editBudgets()" class="text-xs text-indigo-600 hover:text-indigo-800 font-medium">Edit Limits</button>
+      </div>
+
+      <div id="budgetProgressList" class="space-y-3">
+        <!-- Rendered dynamically -->
+      </div>
+    </div>
+
+    <!-- Smart Suggestions Box -->
     <div id="insightBox" class="bg-amber-50 border border-amber-200 text-amber-900 p-4 rounded-xl text-sm hidden">
-      <p class="font-semibold mb-1">💡 Cash Flow Insight</p>
+      <p class="font-semibold mb-1">💡 Spending Insight</p>
       <p id="insightText">Start adding transactions to get smart spending tips.</p>
     </div>
 
@@ -94,7 +116,7 @@
         
         <!-- Type: Expense vs Income -->
         <div>
-          <label class="block text-xs font-medium text-slate-500 mb-1">Type</label>
+          <label class="block text-xs font-medium text-slate-500 mb-1">Entry Type</label>
           <div class="grid grid-cols-2 gap-2">
             <button id="typeExpenseBtn" type="button" onclick="setType('expense')" class="w-full py-2 font-semibold text-sm rounded-lg bg-rose-600 text-white">Expense</button>
             <button id="typeIncomeBtn" type="button" onclick="setType('income')" class="w-full py-2 font-semibold text-sm rounded-lg bg-slate-100 text-slate-600">Income</button>
@@ -105,61 +127,98 @@
         <div>
           <label class="block text-xs font-medium text-slate-500 mb-1">Status</label>
           <div class="grid grid-cols-2 gap-2">
-            <button id="statusActualBtn" type="button" onclick="setStatus('actual')" class="w-full py-1.5 font-semibold text-xs rounded-lg bg-slate-900 text-white">Actual (Done)</button>
+            <button id="statusActualBtn" type="button" onclick="setStatus('actual')" class="w-full py-1.5 font-semibold text-xs rounded-lg bg-slate-900 text-white">Actual (Completed)</button>
             <button id="statusUpcomingBtn" type="button" onclick="setStatus('upcoming')" class="w-full py-1.5 font-semibold text-xs rounded-lg bg-slate-100 text-slate-600">Upcoming (Planned)</button>
           </div>
         </div>
 
+        <!-- Paid By Attribution -->
         <div>
-          <label class="block text-xs font-medium text-slate-600 mb-1">Category</label>
-          <select id="categorySelect" class="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-slate-900 outline-none"></select>
+          <label class="block text-xs font-medium text-slate-500 mb-1">Paid / Received By</label>
+          <div class="grid grid-cols-3 gap-2">
+            <button id="paidHusbandBtn" type="button" onclick="setPaidBy('Husband')" class="py-1.5 text-xs font-semibold rounded-lg bg-indigo-600 text-white">Husband</button>
+            <button id="paidWifeBtn" type="button" onclick="setPaidBy('Wife')" class="py-1.5 text-xs font-semibold rounded-lg bg-slate-100 text-slate-600">Wife</button>
+            <button id="paidJointBtn" type="button" onclick="setPaidBy('Joint')" class="py-1.5 text-xs font-semibold rounded-lg bg-slate-100 text-slate-600">Joint</button>
+          </div>
+        </div>
+
+        <!-- Category & Classification -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label class="block text-xs font-medium text-slate-500 mb-1">Category</label>
+            <select id="categorySelect" onchange="autoSelectClassification()" class="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-slate-900 outline-none"></select>
+          </div>
+
+          <div id="classContainer">
+            <label class="block text-xs font-medium text-slate-500 mb-1">Classification</label>
+            <select id="classificationSelect" class="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-slate-900 outline-none">
+              <option value="Need">🟢 Need (Essential)</option>
+              <option value="Want">🟡 Want (Discretionary)</option>
+              <option value="Savings">🟣 Savings / Debt</option>
+            </select>
+          </div>
         </div>
 
         <div>
-          <label class="block text-xs font-medium text-slate-600 mb-1">Amount</label>
+          <label class="block text-xs font-medium text-slate-500 mb-1">Amount (₱)</label>
           <input type="number" id="amountInput" placeholder="0.00" class="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-slate-900 outline-none" />
         </div>
 
         <div>
-          <label class="block text-xs font-medium text-slate-600 mb-1">Description / Notes</label>
-          <input type="text" id="descInput" placeholder="e.g. Meralco due on 25th, 15th Cutoff Salary" class="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-slate-900 outline-none" />
+          <label class="block text-xs font-medium text-slate-500 mb-1">Description / Notes</label>
+          <input type="text" id="descInput" placeholder="e.g. Meralco bill, Shopee cart checkout" class="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-slate-900 outline-none" />
         </div>
 
         <button id="submitBtn" onclick="addTransaction()" class="w-full bg-slate-900 hover:bg-slate-800 text-white font-medium py-2.5 rounded-lg text-sm transition">Record Entry</button>
       </div>
 
-      <!-- Expense Chart -->
+      <!-- Expense Breakdown Chart -->
       <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200 flex flex-col items-center justify-center">
-        <h2 class="text-lg font-bold text-slate-900 mb-2 self-start">Actual Expense Breakdown</h2>
+        <h2 class="text-lg font-bold text-slate-900 mb-2 self-start">Monthly Spending Breakdown</h2>
         <div class="w-full max-w-[280px]">
           <canvas id="expenseChart"></canvas>
         </div>
       </div>
     </div>
 
-    <!-- Lists with Switchable View -->
+    <!-- Switchable History & Upcoming Lists -->
     <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200 space-y-4">
       <div class="flex justify-between items-center border-b pb-3">
-        <div class="flex space-x-2">
-          <button id="viewUpcomingTab" onclick="setView('upcoming')" class="text-sm font-bold text-indigo-600 border-b-2 border-indigo-600 pb-1">Upcoming Checklist (<span id="upcomingCount">0</span>)</button>
-          <button id="viewActualTab" onclick="setView('actual')" class="text-sm font-semibold text-slate-400 hover:text-slate-600 pb-1">Actual History</button>
+        <div class="flex space-x-4">
+          <button id="viewUpcomingTab" onclick="setView('upcoming')" class="text-sm font-bold text-indigo-600 border-b-2 border-indigo-600 pb-1">
+            Upcoming Checklist (<span id="upcomingCount">0</span>)
+          </button>
+          <button id="viewActualTab" onclick="setView('actual')" class="text-sm font-semibold text-slate-400 hover:text-slate-600 pb-1">
+            Actual History
+          </button>
         </div>
+
+        <!-- Filter by Member -->
+        <select id="memberFilter" onchange="render()" class="text-xs bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 text-slate-600">
+          <option value="All">All Members</option>
+          <option value="Husband">Husband Only</option>
+          <option value="Wife">Wife Only</option>
+          <option value="Joint">Joint Only</option>
+        </select>
       </div>
 
       <!-- Upcoming List -->
       <div id="upcomingSection" class="divide-y divide-slate-100 max-h-80 overflow-y-auto">
-        <p class="text-sm text-slate-400 py-4 text-center">No upcoming bills or earnings planned.</p>
+        <p class="text-sm text-slate-400 py-6 text-center">No upcoming bills or expected earnings pending.</p>
       </div>
 
       <!-- Actual List -->
       <div id="actualSection" class="divide-y divide-slate-100 max-h-80 overflow-y-auto hidden">
-        <p class="text-sm text-slate-400 py-4 text-center">No actual transactions yet.</p>
+        <p class="text-sm text-slate-400 py-6 text-center">No transactions recorded for this period.</p>
       </div>
     </div>
 
   </div>
 
   <script>
+    // ----------------------------------------------------
+    // 1. Firebase Initialization & Offline Persistence
+    // ----------------------------------------------------
     const firebaseConfig = {
       apiKey: "AIzaSyBM2y_QgQ_g5emihqT26zG17ElAJrSKBFc",
       authDomain: "family-budget-5daae.firebaseapp.com",
@@ -173,16 +232,59 @@
     firebase.initializeApp(firebaseConfig);
     const db = firebase.firestore();
 
+    // Enable Offline Persistence so transactions work without cell signal
+    db.enablePersistence({ synchronizeTabs: true }).catch((err) => {
+      console.warn("Offline persistence note:", err.code);
+    });
+
+    // ----------------------------------------------------
+    // 2. State & Variables
+    // ----------------------------------------------------
     let currentType = 'expense';
     let currentStatus = 'actual';
+    let currentPaidBy = 'Husband';
     let currentView = 'upcoming';
     let transactions = [];
     let chartInstance = null;
+
+    // Default Discretionary Budget Caps (saved locally)
+    let budgetLimits = JSON.parse(localStorage.getItem('budget_limits') || JSON.stringify({
+      'Shopee / Online Orders': 4000,
+      'Dining / Takeout': 5000,
+      'Groceries': 15000
+    }));
 
     const categories = {
       income: ['Husband Salary', 'Wife Salary', 'Bonus', 'Loans / Receivables', 'Other Income'],
       expense: ['Groceries', 'Shopee / Online Orders', 'Utility Bills', 'Dining / Takeout', 'Rent / Housing', 'Transportation', 'Other Expenses']
     };
+
+    // ----------------------------------------------------
+    // 3. Month Picker Initialization
+    // ----------------------------------------------------
+    function initMonthFilter() {
+      const select = document.getElementById('monthFilter');
+      const now = new Date();
+      select.innerHTML = '';
+
+      // All Time option
+      const allOpt = document.createElement('option');
+      allOpt.value = 'all';
+      allOpt.textContent = 'All Records (History)';
+      select.appendChild(allOpt);
+
+      // Generate current and past 5 months
+      for (let i = 0; i < 6; i++) {
+        const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+        const val = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+        const label = d.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+        const opt = document.createElement('option');
+        opt.value = val;
+        opt.textContent = label + (i === 0 ? ' (Current)' : '');
+        if (i === 0) opt.selected = true;
+        select.appendChild(opt);
+      }
+    }
 
     function updateCategoryDropdown() {
       const select = document.getElementById('categorySelect');
@@ -193,18 +295,35 @@
         opt.textContent = cat;
         select.appendChild(opt);
       });
+      autoSelectClassification();
+    }
+
+    function autoSelectClassification() {
+      const cat = document.getElementById('categorySelect').value;
+      const classSelect = document.getElementById('classificationSelect');
+      if (['Groceries', 'Utility Bills', 'Rent / Housing', 'Transportation'].includes(cat)) {
+        classSelect.value = 'Need';
+      } else if (['Shopee / Online Orders', 'Dining / Takeout'].includes(cat)) {
+        classSelect.value = 'Want';
+      } else {
+        classSelect.value = 'Savings';
+      }
     }
 
     function setType(type) {
       currentType = type;
       const expenseBtn = document.getElementById('typeExpenseBtn');
       const incomeBtn = document.getElementById('typeIncomeBtn');
+      const classContainer = document.getElementById('classContainer');
+
       if (type === 'expense') {
         expenseBtn.className = 'w-full py-2 font-semibold text-sm rounded-lg bg-rose-600 text-white';
         incomeBtn.className = 'w-full py-2 font-semibold text-sm rounded-lg bg-slate-100 text-slate-600';
+        classContainer.classList.remove('hidden');
       } else {
         incomeBtn.className = 'w-full py-2 font-semibold text-sm rounded-lg bg-emerald-600 text-white';
         expenseBtn.className = 'w-full py-2 font-semibold text-sm rounded-lg bg-slate-100 text-slate-600';
+        classContainer.classList.add('hidden');
       }
       updateCategoryDropdown();
     }
@@ -220,6 +339,18 @@
         upcomingBtn.className = 'w-full py-1.5 font-semibold text-xs rounded-lg bg-indigo-600 text-white';
         actualBtn.className = 'w-full py-1.5 font-semibold text-xs rounded-lg bg-slate-100 text-slate-600';
       }
+    }
+
+    function setPaidBy(member) {
+      currentPaidBy = member;
+      ['Husband', 'Wife', 'Joint'].forEach(m => {
+        const btn = document.getElementById(`paid${m}Btn`);
+        if (m === member) {
+          btn.className = 'py-1.5 text-xs font-semibold rounded-lg bg-indigo-600 text-white';
+        } else {
+          btn.className = 'py-1.5 text-xs font-semibold rounded-lg bg-slate-100 text-slate-600';
+        }
+      });
     }
 
     function setView(view) {
@@ -242,33 +373,42 @@
       }
     }
 
-    // Real-time Cloud Sync
+    // ----------------------------------------------------
+    // 4. Cloud Synchronization Listener
+    // ----------------------------------------------------
     db.collection("transactions").orderBy("createdAt", "desc").onSnapshot((snapshot) => {
       const indicator = document.getElementById('syncIndicator');
-      indicator.className = 'inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-emerald-100 text-emerald-800';
+      indicator.className = 'inline-flex items-center px-2.5 py-1.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-800';
       indicator.textContent = '● Live Synced';
 
       transactions = [];
       snapshot.forEach(doc => {
-        const data = doc.data();
+        const d = doc.data();
         transactions.push({
           id: doc.id,
-          status: data.status || 'actual',
-          ...data
+          status: d.status || 'actual',
+          paidBy: d.paidBy || 'Joint',
+          classification: d.classification || (d.type === 'expense' ? 'Need' : 'Income'),
+          monthKey: d.monthKey || (d.dateStr ? d.dateStr.slice(0, 7) : new Date().toISOString().slice(0, 7)),
+          ...d
         });
       });
       render();
     }, (error) => {
       console.error(error);
       const indicator = document.getElementById('syncIndicator');
-      indicator.className = 'inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-rose-100 text-rose-800';
-      indicator.textContent = 'Sync Error';
+      indicator.className = 'inline-flex items-center px-2.5 py-1.5 rounded-full text-xs font-medium bg-rose-100 text-rose-800';
+      indicator.textContent = 'Sync Error / Offline';
     });
 
+    // ----------------------------------------------------
+    // 5. Actions: Add, Template, Clear, Delete
+    // ----------------------------------------------------
     async function addTransaction() {
       const amount = parseFloat(document.getElementById('amountInput').value);
       const category = document.getElementById('categorySelect').value;
       const desc = document.getElementById('descInput').value.trim();
+      const classification = document.getElementById('classificationSelect').value;
       const btn = document.getElementById('submitBtn');
 
       if (!amount || amount <= 0) {
@@ -279,14 +419,20 @@
       btn.disabled = true;
       btn.textContent = 'Saving...';
 
+      const now = new Date();
+      const monthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+
       try {
         await db.collection("transactions").add({
           type: currentType,
           status: currentStatus,
+          paidBy: currentPaidBy,
+          classification: currentType === 'expense' ? classification : 'Income',
           category,
           amount,
           desc: desc || category,
-          date: new Date().toLocaleDateString('en-PH', { month: 'short', day: 'numeric' }),
+          monthKey,
+          date: now.toLocaleDateString('en-PH', { month: 'short', day: 'numeric' }),
           createdAt: firebase.firestore.FieldValue.serverTimestamp()
         });
 
@@ -300,7 +446,41 @@
       }
     }
 
-    // Convert Upcoming entry to Actual with 1 click
+    // 1-Click Monthly Recurring Bills
+    async function addRecurringTemplates() {
+      if (!confirm('Load standard recurring bills (Electricity, Water, Internet, Groceries) into your Upcoming Checklist?')) return;
+
+      const now = new Date();
+      const monthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+
+      const templates = [
+        { desc: 'Meralco / Electricity Bill', amount: 3500, category: 'Utility Bills', classification: 'Need', paidBy: 'Husband' },
+        { desc: 'Water Bill', amount: 600, category: 'Utility Bills', classification: 'Need', paidBy: 'Wife' },
+        { desc: 'Fiber Internet (PLDT/Converge)', amount: 1699, category: 'Utility Bills', classification: 'Need', paidBy: 'Husband' },
+        { desc: 'Monthly Grocery Budget', amount: 12000, category: 'Groceries', classification: 'Need', paidBy: 'Joint' }
+      ];
+
+      const batch = db.batch();
+      templates.forEach(t => {
+        const ref = db.collection("transactions").doc();
+        batch.set(ref, {
+          ...t,
+          type: 'expense',
+          status: 'upcoming',
+          monthKey,
+          date: now.toLocaleDateString('en-PH', { month: 'short', day: 'numeric' }),
+          createdAt: firebase.firestore.FieldValue.serverTimestamp()
+        });
+      });
+
+      try {
+        await batch.commit();
+        setView('upcoming');
+      } catch (e) {
+        alert('Error adding templates: ' + e.message);
+      }
+    }
+
     async function markAsActual(docId) {
       try {
         await db.collection("transactions").doc(docId).update({
@@ -321,17 +501,47 @@
       }
     }
 
+    function editBudgets() {
+      const shopee = prompt('Set monthly limit for Shopee / Online Orders (₱):', budgetLimits['Shopee / Online Orders'] || 4000);
+      const dining = prompt('Set monthly limit for Dining / Takeout (₱):', budgetLimits['Dining / Takeout'] || 5000);
+      const groceries = prompt('Set monthly limit for Groceries (₱):', budgetLimits['Groceries'] || 15000);
+
+      if (shopee !== null) budgetLimits['Shopee / Online Orders'] = parseFloat(shopee) || 0;
+      if (dining !== null) budgetLimits['Dining / Takeout'] = parseFloat(dining) || 0;
+      if (groceries !== null) budgetLimits['Groceries'] = parseFloat(groceries) || 0;
+
+      localStorage.setItem('budget_limits', JSON.stringify(budgetLimits));
+      render();
+    }
+
+    // ----------------------------------------------------
+    // 6. Main Render & Calculations
+    // ----------------------------------------------------
     function render() {
+      const selectedMonth = document.getElementById('monthFilter').value;
+      const selectedMember = document.getElementById('memberFilter').value;
+
+      // Filter transactions
+      const filtered = transactions.filter(t => {
+        const matchesMonth = (selectedMonth === 'all') || (t.monthKey === selectedMonth);
+        const matchesMember = (selectedMember === 'All') || (t.paidBy === selectedMember);
+        return matchesMonth && matchesMember;
+      });
+
       let actualIncome = 0;
       let actualExpense = 0;
       let upcomingIncome = 0;
       let upcomingExpense = 0;
-      const actualCategoryTotals = {};
 
+      let needExpense = 0;
+      let wantExpense = 0;
+      let savingsExpense = 0;
+
+      const categoryTotals = {};
       const upcomingItems = [];
       const actualItems = [];
 
-      transactions.forEach(t => {
+      filtered.forEach(t => {
         const amt = t.amount || 0;
         const isActual = (t.status === 'actual');
 
@@ -341,7 +551,11 @@
             actualIncome += amt;
           } else {
             actualExpense += amt;
-            actualCategoryTotals[t.category] = (actualCategoryTotals[t.category] || 0) + amt;
+            categoryTotals[t.category] = (categoryTotals[t.category] || 0) + amt;
+
+            if (t.classification === 'Need') needExpense += amt;
+            else if (t.classification === 'Want') wantExpense += amt;
+            else if (t.classification === 'Savings') savingsExpense += amt;
           }
         } else {
           upcomingItems.push(t);
@@ -353,43 +567,66 @@
         }
       });
 
-      const totalExpectedIncome = actualIncome + upcomingIncome;
-      const totalExpectedExpense = actualExpense + upcomingExpense;
+      const actualBal = actualIncome - actualExpense;
+      const projectedBal = (actualIncome + upcomingIncome) - (actualExpense + upcomingExpense);
 
-      const currentActualBalance = actualIncome - actualExpense;
-      const projectedMonthEndBalance = totalExpectedIncome - totalExpectedExpense;
-
-      // Update Summary Cards
+      // 1. Balance Cards
       const actualBalEl = document.getElementById('actualBalance');
-      actualBalEl.textContent = '₱' + currentActualBalance.toLocaleString(undefined, {minimumFractionDigits: 2});
-      actualBalEl.className = 'text-3xl font-extrabold mt-2 ' + (currentActualBalance >= 0 ? 'text-slate-900' : 'text-rose-600');
+      actualBalEl.textContent = '₱' + actualBal.toLocaleString(undefined, {minimumFractionDigits: 2});
+      actualBalEl.className = 'text-3xl font-extrabold mt-2 ' + (actualBal >= 0 ? 'text-slate-900' : 'text-rose-600');
 
       const projectedBalEl = document.getElementById('projectedBalance');
-      projectedBalEl.textContent = '₱' + projectedMonthEndBalance.toLocaleString(undefined, {minimumFractionDigits: 2});
-      projectedBalEl.className = 'text-3xl font-extrabold mt-2 ' + (projectedMonthEndBalance >= 0 ? 'text-indigo-600' : 'text-rose-600');
+      projectedBalEl.textContent = '₱' + projectedBal.toLocaleString(undefined, {minimumFractionDigits: 2});
+      projectedBalEl.className = 'text-3xl font-extrabold mt-2 ' + (projectedBal >= 0 ? 'text-indigo-600' : 'text-rose-600');
 
-      // Update Expected vs Actual Progress
-      document.getElementById('actualIncomeText').textContent = '₱' + actualIncome.toLocaleString(undefined, {minimumFractionDigits: 2});
-      document.getElementById('expectedIncomeText').textContent = '₱' + totalExpectedIncome.toLocaleString(undefined, {minimumFractionDigits: 2});
-      document.getElementById('pendingIncomeText').textContent = '₱' + upcomingIncome.toLocaleString(undefined, {minimumFractionDigits: 2}) + ' upcoming';
+      // 2. 50/30/20 Rule Breakdown
+      const totalAllocated = actualExpense > 0 ? actualExpense : 1;
+      const needsPct = actualExpense > 0 ? Math.round((needExpense / totalAllocated) * 100) : 0;
+      const wantsPct = actualExpense > 0 ? Math.round((wantExpense / totalAllocated) * 100) : 0;
+      const savingsPct = actualExpense > 0 ? Math.round((savingsExpense / totalAllocated) * 100) : 0;
 
-      const incomePct = totalExpectedIncome > 0 ? Math.min(100, Math.round((actualIncome / totalExpectedIncome) * 100)) : 0;
-      document.getElementById('incomeProgressBar').style.width = incomePct + '%';
-      document.getElementById('incomeProgressPercent').textContent = incomePct + '% received';
+      document.getElementById('barNeeds').style.width = needsPct + '%';
+      document.getElementById('barWants').style.width = wantsPct + '%';
+      document.getElementById('barSavings').style.width = savingsPct + '%';
 
-      document.getElementById('actualExpenseText').textContent = '₱' + actualExpense.toLocaleString(undefined, {minimumFractionDigits: 2});
-      document.getElementById('expectedExpenseText').textContent = '₱' + totalExpectedExpense.toLocaleString(undefined, {minimumFractionDigits: 2});
-      document.getElementById('pendingExpenseText').textContent = '₱' + upcomingExpense.toLocaleString(undefined, {minimumFractionDigits: 2}) + ' pending';
+      document.getElementById('needsPercent').textContent = `₱${needExpense.toLocaleString()} (${needsPct}%)`;
+      document.getElementById('wantsPercent').textContent = `₱${wantExpense.toLocaleString()} (${wantsPct}%)`;
+      document.getElementById('savingsPercent').textContent = `₱${savingsExpense.toLocaleString()} (${savingsPct}%)`;
 
-      const expensePct = totalExpectedExpense > 0 ? Math.min(100, Math.round((actualExpense / totalExpectedExpense) * 100)) : 0;
-      document.getElementById('expenseProgressBar').style.width = expensePct + '%';
-      document.getElementById('expenseProgressPercent').textContent = expensePct + '% spent';
+      // 3. Category Budget Progress Bars
+      const budgetContainer = document.getElementById('budgetProgressList');
+      budgetContainer.innerHTML = '';
+      Object.keys(budgetLimits).forEach(cat => {
+        const spent = categoryTotals[cat] || 0;
+        const limit = budgetLimits[cat];
+        const pct = Math.min(100, Math.round((spent / limit) * 100));
 
-      document.getElementById('upcomingCount').textContent = upcomingItems.length;
+        let color = 'bg-emerald-500';
+        let statusBadge = 'text-emerald-700 bg-emerald-50';
+        if (pct >= 100) {
+          color = 'bg-rose-500';
+          statusBadge = 'text-rose-700 bg-rose-50 font-bold';
+        } else if (pct >= 80) {
+          color = 'bg-amber-500';
+          statusBadge = 'text-amber-700 bg-amber-50 font-bold';
+        }
 
-      // Doughnut Chart (Actual Expenses)
-      const chartLabels = Object.keys(actualCategoryTotals);
-      const chartData = Object.values(actualCategoryTotals);
+        budgetContainer.innerHTML += `
+          <div>
+            <div class="flex justify-between items-center text-xs mb-1">
+              <span class="font-semibold text-slate-800">${cat}</span>
+              <span class="px-2 py-0.5 rounded-full text-[11px] ${statusBadge}">₱${spent.toLocaleString()} / ₱${limit.toLocaleString()} (${pct}%)</span>
+            </div>
+            <div class="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
+              <div class="${color} h-2 rounded-full" style="width: ${pct}%"></div>
+            </div>
+          </div>
+        `;
+      });
+
+      // 4. Doughnut Chart
+      const chartLabels = Object.keys(categoryTotals);
+      const chartData = Object.values(categoryTotals);
 
       if (chartInstance) chartInstance.destroy();
 
@@ -397,7 +634,7 @@
       chartInstance = new Chart(ctx, {
         type: 'doughnut',
         data: {
-          labels: chartLabels.length ? chartLabels : ['No Actual Expenses'],
+          labels: chartLabels.length ? chartLabels : ['No Expenses'],
           datasets: [{
             data: chartData.length ? chartData : [1],
             backgroundColor: chartData.length ? ['#f43f5e', '#fb923c', '#38bdf8', '#818cf8', '#a855f7', '#10b981', '#94a3b8'] : ['#e2e8f0']
@@ -406,12 +643,13 @@
         options: {
           responsive: true,
           plugins: {
-            legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 10 } } }
+            legend: { position: 'bottom', labels: { boxWidth: 10, font: { size: 10 } } }
           }
         }
       });
 
-      // Render Upcoming Checklist
+      // 5. Render Upcoming Checklist
+      document.getElementById('upcomingCount').textContent = upcomingItems.length;
       const upcomingListEl = document.getElementById('upcomingSection');
       if (upcomingItems.length === 0) {
         upcomingListEl.innerHTML = '<p class="text-sm text-slate-400 py-6 text-center">No upcoming bills or expected earnings pending! 🎉</p>';
@@ -421,8 +659,9 @@
             <div>
               <div class="flex items-center space-x-2">
                 <span class="inline-block px-1.5 py-0.5 text-[10px] rounded font-bold ${t.type === 'income' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}">
-                  ${t.type === 'income' ? 'EXPECTED INCOME' : 'UPCOMING BILL'}
+                  ${t.type === 'income' ? 'EXPECTED' : 'UPCOMING'}
                 </span>
+                <span class="text-[10px] px-1.5 py-0.5 rounded font-medium bg-slate-100 text-slate-700">${t.paidBy}</span>
                 <p class="font-medium text-slate-900">${t.desc}</p>
               </div>
               <p class="text-xs text-slate-400 mt-0.5">${t.date} • ${t.category}</p>
@@ -440,16 +679,20 @@
         `).join('');
       }
 
-      // Render Actual History
+      // 6. Render Actual History
       const actualListEl = document.getElementById('actualSection');
       if (actualItems.length === 0) {
-        actualListEl.innerHTML = '<p class="text-sm text-slate-400 py-6 text-center">No actual transactions recorded yet.</p>';
+        actualListEl.innerHTML = '<p class="text-sm text-slate-400 py-6 text-center">No actual transactions recorded for this selection.</p>';
       } else {
         actualListEl.innerHTML = actualItems.map(t => `
           <div class="py-3 flex justify-between items-center text-sm">
             <div>
-              <p class="font-medium text-slate-900">${t.desc}</p>
-              <p class="text-xs text-slate-400">${t.date} • ${t.category}</p>
+              <div class="flex items-center space-x-1.5">
+                <span class="text-[10px] px-1.5 py-0.5 rounded font-medium ${t.paidBy === 'Husband' ? 'bg-blue-50 text-blue-700' : t.paidBy === 'Wife' ? 'bg-purple-50 text-purple-700' : 'bg-slate-100 text-slate-700'}">${t.paidBy}</span>
+                <span class="text-[10px] px-1.5 py-0.5 rounded font-medium bg-slate-100 text-slate-500">${t.classification}</span>
+                <p class="font-medium text-slate-900">${t.desc}</p>
+              </div>
+              <p class="text-xs text-slate-400 mt-0.5">${t.date} • ${t.category}</p>
             </div>
             <div class="flex items-center space-x-3">
               <span class="font-semibold ${t.type === 'income' ? 'text-emerald-600' : 'text-slate-800'}">
@@ -461,26 +704,22 @@
         `).join('');
       }
 
-      // Forecasting Insights
+      // 7. Dynamic Insights
       const insightBox = document.getElementById('insightBox');
       const insightText = document.getElementById('insightText');
-      if (totalExpectedExpense > 0 || totalExpectedIncome > 0) {
-        if (projectedMonthEndBalance < 0) {
-          insightBox.classList.remove('hidden');
-          insightText.innerHTML = `⚠️ <strong>Cash flow warning:</strong> Your projected expenses exceed total expected earnings by <strong>₱${Math.abs(projectedMonthEndBalance).toLocaleString(undefined, {minimumFractionDigits: 2})}</strong>. Hold off on non-essential purchases until additional income is verified.`;
-        } else if (upcomingExpense > currentActualBalance) {
-          insightBox.classList.remove('hidden');
-          insightText.innerHTML = `⏳ <strong>Timing notice:</strong> Upcoming pending bills (₱${upcomingExpense.toLocaleString()}) currently exceed your bank balance (₱${currentActualBalance.toLocaleString()}). Make sure expected salaries clear before paying those bills.`;
-        } else if (totalExpectedIncome > 0) {
-          const projectedSavingsRate = ((projectedMonthEndBalance / totalExpectedIncome) * 100).toFixed(1);
-          insightBox.classList.remove('hidden');
-          insightText.innerHTML = `On track: You are projected to finish the cycle with <strong>₱${projectedMonthEndBalance.toLocaleString(undefined, {minimumFractionDigits: 2})}</strong> in net savings (${projectedSavingsRate}% of total earnings).`;
-        }
+      if (wantsPct > 35) {
+        insightBox.classList.remove('hidden');
+        insightText.innerHTML = `⚠️ <strong>Discretionary Notice:</strong> 'Wants' (shopping/dining) currently take up <strong>${wantsPct}%</strong> of total spending (recommended target is $\\le$ 30%). Consider cooling off on online checkouts.`;
+      } else if (actualBal < 0) {
+        insightBox.classList.remove('hidden');
+        insightText.innerHTML = `⚠️ <strong>Overdraft Alert:</strong> Current cleared expenses exceed actual cash by <strong>₱${Math.abs(actualBal).toLocaleString()}</strong>. Avoid unlisted purchases until your next salary clears.`;
       } else {
         insightBox.classList.add('hidden');
       }
     }
 
+    // Initialize Page
+    initMonthFilter();
     updateCategoryDropdown();
   </script>
 </body>
