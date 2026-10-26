@@ -6,6 +6,9 @@
   <title>Family Finance Tracker</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <!-- Firebase Compatibility Libraries -->
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
 </head>
 <body class="bg-slate-50 text-slate-800 antialiased min-h-screen">
   <div class="max-w-4xl mx-auto p-4 sm:p-6 space-y-6">
@@ -14,9 +17,13 @@
     <header class="flex justify-between items-center border-b pb-4">
       <div>
         <h1 class="text-2xl font-bold text-slate-900">Family Finance Tracker</h1>
-        <p class="text-xs sm:text-sm text-slate-500">Track combined income, bills, groceries, and Shopee orders</p>
+        <p class="text-xs sm:text-sm text-slate-500">Live synced across all devices</p>
       </div>
-      <button onclick="exportData()" class="text-xs bg-slate-200 hover:bg-slate-300 text-slate-700 px-3 py-1.5 rounded-lg font-medium">Backup / Export</button>
+      <div class="flex items-center space-x-2">
+        <span id="syncIndicator" class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-amber-100 text-amber-800">
+          Connecting to Cloud...
+        </span>
+      </div>
     </header>
 
     <!-- Summary Cards -->
@@ -54,7 +61,6 @@
         <div>
           <label class="block text-xs font-medium text-slate-600 mb-1">Category</label>
           <select id="categorySelect" class="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-slate-900 outline-none">
-            <!-- Populated dynamically -->
           </select>
         </div>
 
@@ -65,10 +71,10 @@
 
         <div>
           <label class="block text-xs font-medium text-slate-600 mb-1">Description / Notes</label>
-          <input type="text" id="descInput" placeholder="e.g. Meralco bill, Shopee cart sale" class="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-slate-900 outline-none" />
+          <input type="text" id="descInput" placeholder="e.g. Meralco bill, Shopee cart, Salary" class="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-slate-900 outline-none" />
         </div>
 
-        <button onclick="addTransaction()" class="w-full bg-slate-900 hover:bg-slate-800 text-white font-medium py-2.5 rounded-lg text-sm transition">Record Transaction</button>
+        <button id="submitBtn" onclick="addTransaction()" class="w-full bg-slate-900 hover:bg-slate-800 text-white font-medium py-2.5 rounded-lg text-sm transition">Record Transaction</button>
       </div>
 
       <!-- Expense Chart -->
@@ -82,17 +88,31 @@
 
     <!-- Recent History -->
     <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200 space-y-3">
-      <h2 class="text-lg font-bold text-slate-900">Recent Transactions</h2>
+      <h2 class="text-lg font-bold text-slate-900">Recent Transactions (Live Synced)</h2>
       <div id="txList" class="divide-y divide-slate-100 max-h-80 overflow-y-auto">
-        <p class="text-sm text-slate-400 py-4 text-center">No transactions added yet.</p>
+        <p class="text-sm text-slate-400 py-4 text-center">Loading transactions from cloud...</p>
       </div>
     </div>
 
   </div>
 
   <script>
+    // Config automatically populated from your Firebase project
+    const firebaseConfig = {
+      apiKey: "AIzaSyBM2y_QgQ_g5emihqT26zG17ElAJrSKBFc",
+      authDomain: "family-budget-5daae.firebaseapp.com",
+      projectId: "family-budget-5daae",
+      storageBucket: "family-budget-5daae.firebasestorage.app",
+      messagingSenderId: "854232585675",
+      appId: "1:854232585675:web:3562b1ec65053e3543524e",
+      measurementId: "G-B5XJ3LRPMG"
+    };
+
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.firestore();
+
     let currentType = 'expense';
-    let transactions = JSON.parse(localStorage.getItem('family_finance_data') || '[]');
+    let transactions = [];
     let chartInstance = null;
 
     const categories = {
@@ -125,35 +145,65 @@
       updateCategoryDropdown();
     }
 
-    function addTransaction() {
+    // Real-time synchronization listener
+    db.collection("transactions").orderBy("createdAt", "desc").onSnapshot((snapshot) => {
+      const indicator = document.getElementById('syncIndicator');
+      indicator.className = 'inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-emerald-100 text-emerald-800';
+      indicator.textContent = '● Live Synced';
+
+      transactions = [];
+      snapshot.forEach(doc => {
+        transactions.push({ id: doc.id, ...doc.data() });
+      });
+      render();
+    }, (error) => {
+      console.error(error);
+      const indicator = document.getElementById('syncIndicator');
+      indicator.className = 'inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-rose-100 text-rose-800';
+      indicator.textContent = 'Sync Error';
+    });
+
+    async function addTransaction() {
       const amount = parseFloat(document.getElementById('amountInput').value);
       const category = document.getElementById('categorySelect').value;
       const desc = document.getElementById('descInput').value.trim();
+      const btn = document.getElementById('submitBtn');
 
       if (!amount || amount <= 0) {
         alert('Please enter a valid amount.');
         return;
       }
 
-      transactions.unshift({
-        id: Date.now(),
-        type: currentType,
-        category,
-        amount,
-        desc: desc || category,
-        date: new Date().toLocaleDateString('en-PH', { month: 'short', day: 'numeric' })
-      });
+      btn.disabled = true;
+      btn.textContent = 'Saving...';
 
-      localStorage.setItem('family_finance_data', JSON.stringify(transactions));
-      document.getElementById('amountInput').value = '';
-      document.getElementById('descInput').value = '';
-      render();
+      try {
+        await db.collection("transactions").add({
+          type: currentType,
+          category,
+          amount,
+          desc: desc || category,
+          date: new Date().toLocaleDateString('en-PH', { month: 'short', day: 'numeric' }),
+          createdAt: firebase.firestore.FieldValue.serverTimestamp()
+        });
+
+        document.getElementById('amountInput').value = '';
+        document.getElementById('descInput').value = '';
+      } catch (err) {
+        alert('Error saving transaction: ' + err.message);
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Record Transaction';
+      }
     }
 
-    function deleteTransaction(id) {
-      transactions = transactions.filter(t => t.id !== id);
-      localStorage.setItem('family_finance_data', JSON.stringify(transactions));
-      render();
+    async function deleteTransaction(docId) {
+      if (!confirm('Delete this entry?')) return;
+      try {
+        await db.collection("transactions").doc(docId).delete();
+      } catch (err) {
+        alert('Error deleting: ' + err.message);
+      }
     }
 
     function render() {
@@ -163,10 +213,10 @@
 
       transactions.forEach(t => {
         if (t.type === 'income') {
-          income += t.amount;
+          income += (t.amount || 0);
         } else {
-          expenses += t.amount;
-          categoryTotals[t.category] = (categoryTotals[t.category] || 0) + t.amount;
+          expenses += (t.amount || 0);
+          categoryTotals[t.category] = (categoryTotals[t.category] || 0) + (t.amount || 0);
         }
       });
 
@@ -177,7 +227,7 @@
       balanceEl.textContent = '₱' + balance.toLocaleString(undefined, {minimumFractionDigits: 2});
       balanceEl.className = 'text-2xl font-bold mt-1 ' + (balance >= 0 ? 'text-slate-900' : 'text-rose-600');
 
-      // Update Chart
+      // Doughnut Chart
       const chartLabels = Object.keys(categoryTotals);
       const chartData = Object.values(categoryTotals);
 
@@ -201,10 +251,10 @@
         }
       });
 
-      // Update List
+      // Transaction List
       const listEl = document.getElementById('txList');
       if (transactions.length === 0) {
-        listEl.innerHTML = '<p class="text-sm text-slate-400 py-4 text-center">No transactions added yet.</p>';
+        listEl.innerHTML = '<p class="text-sm text-slate-400 py-4 text-center">No transactions added yet. Add one above!</p>';
       } else {
         listEl.innerHTML = transactions.map(t => `
           <div class="py-3 flex justify-between items-center text-sm">
@@ -216,13 +266,13 @@
               <span class="font-semibold ${t.type === 'income' ? 'text-emerald-600' : 'text-slate-800'}">
                 ${t.type === 'income' ? '+' : '-'}₱${t.amount.toLocaleString(undefined, {minimumFractionDigits: 2})}
               </span>
-              <button onclick="deleteTransaction(${t.id})" class="text-slate-400 hover:text-rose-600 text-xs">✕</button>
+              <button onclick="deleteTransaction('${t.id}')" class="text-slate-400 hover:text-rose-600 text-xs font-bold px-1">✕</button>
             </div>
           </div>
         `).join('');
       }
 
-      // Smart Insights
+      // Insights
       const insightBox = document.getElementById('insightBox');
       const insightText = document.getElementById('insightText');
       if (expenses > 0 && income > 0) {
@@ -232,34 +282,23 @@
 
         if (shopeeShare > 25) {
           insightBox.classList.remove('hidden');
-          insightText.textContent = `Online shopping accounts for ${shopeeShare.toFixed(1)}% of your total expenses. Consider adding a weekly cooling-off period for cart checkout.`;
+          insightText.textContent = `Online shopping accounts for ${shopeeShare.toFixed(1)}% of your total expenses. Consider reviewing recurring cart items.`;
         } else if (savingsRate < 10 && balance >= 0) {
           insightBox.classList.remove('hidden');
-          insightText.textContent = `Current savings rate is ${savingsRate.toFixed(1)}%. Review recurring utility and miscellaneous bills to aim for a 20% buffer.`;
+          insightText.textContent = `Current savings buffer is ${savingsRate.toFixed(1)}%. Review recurring utilities and non-essential expenses to hit a 20% target.`;
         } else if (balance < 0) {
           insightBox.classList.remove('hidden');
-          insightText.textContent = `Expenses exceed current income by ₱${Math.abs(balance).toLocaleString()}. Prioritize mandatory groceries and bills first.`;
+          insightText.textContent = `Expenses exceed household earnings by ₱${Math.abs(balance).toLocaleString()}. Prioritize essential bills and groceries first.`;
         } else {
           insightBox.classList.remove('hidden');
-          insightText.textContent = `Healthy balance: you are retaining ${savingsRate.toFixed(1)}% of total household earnings.`;
+          insightText.textContent = `Healthy balance: you are retaining ${savingsRate.toFixed(1)}% of total combined earnings.`;
         }
       } else {
         insightBox.classList.add('hidden');
       }
     }
 
-    function exportData() {
-      const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(transactions));
-      const downloadAnchor = document.createElement('a');
-      downloadAnchor.setAttribute("href", dataStr);
-      downloadAnchor.setAttribute("download", "family_finance_backup.json");
-      document.body.appendChild(downloadAnchor);
-      downloadAnchor.click();
-      downloadAnchor.remove();
-    }
-
     updateCategoryDropdown();
-    render();
   </script>
 </body>
 </html>
